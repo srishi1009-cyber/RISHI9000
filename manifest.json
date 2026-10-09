@@ -1,0 +1,31 @@
+{
+  "name": "Rishi Music",
+  "short_name": "RishiMusic",
+  "start_url": "https://srishi1009-cyber.github.io/RISHI3000/",
+  "scope": "https://srishi1009-cyber.github.io/RISHI3000/",
+  "id": "https://srishi1009-cyber.github.io/RISHI3000/",
+  "display": "standalone",
+  "background_color": "#0c0f14",
+  "theme_color": "#1da1f2",
+  "description": "Personal offline music player",
+  "icons": [
+    {
+      "src": "https://srishi1009-cyber.github.io/RISHI3000/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://srishi1009-cyber.github.io/RISHI3000/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://srishi1009-cyber.github.io/RISHI3000/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <h2>Generating Rishi Music Icons...</h2>
+  <script>
+    const img = new Image();
+    img.src = 'icon.png';
+    img.onload = () => {
+      [192, 512].forEach(size => {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        
+        // Draw centered square crop
+        const minDim = Math.min(img.width, img.height);
+        const sx = (img.width - minDim) / 2;
+        const sy = (img.height - minDim) / 2;
+        ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, size, size);
+        
+        const a = document.createElement('a');
+        a.download = `icon-${size}.png`;
+        a.href = canvas.toDataURL('image/png');
+        a.click();
+      });
+    };
+  </script>
+</body>
+</html>

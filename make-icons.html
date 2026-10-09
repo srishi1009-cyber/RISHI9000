@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <h2>Generating Rishi Music Icons...</h2>
+  <script>
+    function generateIcon(size, filename) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+
+      // Dark blue background gradient
+      const bg = ctx.createLinearGradient(0, 0, size, size);
+      bg.addColorStop(0, '#0c0f14');
+      bg.addColorStop(1, '#001a33');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, size, size);
+
+      // Outer cyan glow ring
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size * 0.38, 0, Math.PI * 2);
+      ctx.lineWidth = size * 0.04;
+      ctx.strokeStyle = '#00d2ff';
+      ctx.shadowColor = '#0088ff';
+      ctx.shadowBlur = size * 0.08;
+      ctx.stroke();
+
+      // Music note symbol (♫)
+      ctx.shadowBlur = size * 0.05;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${Math.floor(size * 0.35)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('♫', size / 2, size / 2);
+
+      // Trigger automatic PNG download
+      const a = document.createElement('a');
+      a.download = filename;
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    }
+
+    // Auto-generate both required sizes
+    window.onload = () => {
+      generateIcon(192, 'icon-192.png');
+      setTimeout(() => generateIcon(512, 'icon-512.png'), 500);
+    };
+  </script>
+</body>
+</html>
