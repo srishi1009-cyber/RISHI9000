@@ -1,186 +1,71 @@
-const CACHE_NAME = "rishi-music-v7";
+/* Rishi Music service worker
+   Caches the app files so the app opens offline.
+   Your songs are NOT stored here. They live in IndexedDB (see app.js).
+   Paths are relative, so this works at https://<username>.github.io/RISHI9000/ */
 
-const APP_FILES = [
-  "./",
-  "./index.html",
-  "./style.css",
-  "./app.js",
-  "./manifest.json",
-  "./icon-192.png",
-  "./icon-512.png"
+const CACHE = 'rishi-music-v6';   // change this number whenever you update your files
+
+const APP_SHELL = [
+  './',
+  'index.html',
+  'style.css',
+  'app.js',
+  'manifest.json',
+  'icons/icon-192.png',
+  'icons/icon-512.png'
 ];
 
-
-// ================================
-// INSTALL
-// ================================
-
-self.addEventListener("install", function (event) {
-
+self.addEventListener('install', event => {
   event.waitUntil(
-
-    caches.open(CACHE_NAME)
-
-      .then(function (cache) {
-
-        return Promise.all(
-
-          APP_FILES.map(function (file) {
-
-            return fetch(file, {
-              cache: "no-store"
-            })
-              .then(function (response) {
-
-                if (!response.ok) {
-                  throw new Error(
-                    "Could not cache: " + file
-                  );
-                }
-
-                return cache.put(
-                  file,
-                  response
-                );
-
-              })
-              .catch(function (error) {
-
-                console.warn(
-                  "Cache skipped:",
-                  file,
-                  error
-                );
-
-              });
-
-          })
-
-        );
-
-      })
-
-      .then(function () {
-
-        return self.skipWaiting();
-
-      })
-
+    caches.open(CACHE)
+      .then(cache => Promise.all(APP_SHELL.map(f => cache.add(f).catch(() => {}))))   // one missing file must not break the worker
+      .then(() => self.skipWaiting())
   );
-
 });
 
-
-// ================================
-// ACTIVATE
-// ================================
-
-self.addEventListener("activate", function (event) {
-
+self.addEventListener('activate', event => {
   event.waitUntil(
-
     caches.keys()
-
-      .then(function (cacheNames) {
-
-        return Promise.all(
-
-          cacheNames.map(function (cacheName) {
-
-            if (
-              cacheName.startsWith("rishi-music-") &&
-              cacheName !== CACHE_NAME
-            ) {
-
-              return caches.delete(cacheName);
-
-            }
-
-          })
-
-        );
-
-      })
-
-      .then(function () {
-
-        return self.clients.claim();
-
-      })
-
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-
 });
 
+self.addEventListener('fetch', event => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
 
-// ================================
-// FETCH
-// ================================
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.includes('/songs/') || req.headers.has('range')) return;   // audio is stored by the app, not cached here
 
-self.addEventListener("fetch", function (event) {
-
-  const request = event.request;
-
-  // Only GET requests
-  if (request.method !== "GET") {
+  // Page loads: try network first, fall back to cached page when offline
+  if (req.mode === 'navigate') {
+    event.respondWith(
+      fetch(req)
+        .then(res => {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put('index.html', copy));
+          return res;
+        })
+        .catch(() => caches.match('index.html').then(r => r || caches.match('./')))
+    );
     return;
   }
 
-  // Ignore blob audio URLs
-  if (request.url.startsWith("blob:")) {
-    return;
-  }
-
-  const url = new URL(request.url);
-
-  // Only handle this GitHub Pages app
-  if (
-    url.origin !== self.location.origin
-  ) {
-    return;
-  }
-
+  // Other files: serve from cache instantly, refresh in the background
   event.respondWith(
-
-    fetch(request)
-
-      .then(function (response) {
-
-        // Update cached app files
-        if (response && response.ok) {
-
-          const copy = response.clone();
-
-          caches.open(CACHE_NAME)
-            .then(function (cache) {
-
-              cache.put(request, copy);
-
-            })
-            .catch(function () {});
-
-        }
-
-        return response;
-
-      })
-
-      .catch(function () {
-
-        return caches.match(request)
-
-          .then(function (cached) {
-
-            if (cached) {
-              return cached;
-            }
-
-            return caches.match("./index.html");
-
-          });
-
-      })
-
+    caches.match(req).then(cached => {
+      const fetching = fetch(req)
+        .then(res => {
+          if (res && res.status === 200) {
+            const copy = res.clone();
+            caches.open(CACHE).then(c => c.put(req, copy));
+          }
+          return res;
+        })
+        .catch(() => cached);
+      return cached || fetching;
+    })
   );
-
 });
