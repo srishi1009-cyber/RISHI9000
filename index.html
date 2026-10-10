@@ -1,326 +1,111 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
   <meta charset="UTF-8">
-
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-  >
-
-  <meta
-    name="theme-color"
-    content="#071a3d"
-  >
-
-  <meta
-    name="description"
-    content="Rishi Music - offline personal music player"
-  >
-
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#070912">
   <meta name="mobile-web-app-capable" content="yes">
-
   <meta name="apple-mobile-web-app-capable" content="yes">
-
-  <meta
-    name="apple-mobile-web-app-status-bar-style"
-    content="black-translucent"
-  >
-
-  <meta
-    name="apple-mobile-web-app-title"
-    content="Rishi Music"
-  >
-
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Rishi Music</title>
-
-  <link
-    rel="manifest"
-    href="./manifest.json"
-  >
-
-  <link
-    rel="stylesheet"
-    href="./style.css"
-  >
-
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
 </head>
+<body class="is-idle is-paused">
 
+  <header class="top">
+    <h1 class="logo">&#9835; RISHI MUSIC</h1>
+    <p class="tagline">Personal Audio Station</p>
+    <button id="importBtn" class="btn-import">+ Import Track</button>
 
-<body>
+    <div class="backup-row">
+      <button id="backupBtn" class="btn-ghost">&#11015; Backup</button>
+      <button id="restoreBtn" class="btn-ghost">&#11014; Restore</button>
+      <button id="syncBtn" class="btn-ghost">&#8635; Sync</button>
+      <input id="restoreInput" type="file" hidden>
+    </div>
 
-  <div class="app-shell">
-
-
-    <!-- SIDEBAR -->
-
-    <aside class="sidebar">
-
-      <div class="brand">
-
-        <div class="brand-icon">
-          ♫
-        </div>
-
-        <div>
-
-          <h1>RISHI MUSIC</h1>
-
-          <p>
-            Offline Music Station
-          </p>
-
-        </div>
-
-      </div>
-
-
-      <!-- IMPORT -->
-
-      <label class="import-button">
-
-        <span>
-          ＋ Import Songs
-        </span>
-
-        <input
-          id="audioFileInput"
-          type="file"
-          accept="audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.webm"
-          multiple
-        >
-
-      </label>
-
-
-      <!-- ALL SONGS -->
-
-      <button
-        id="allModeBtn"
-        class="side-button active"
-      >
-        ♫ All Songs
-      </button>
-
-
-      <!-- DIRECTOR -->
-
-      <div class="filter-title">
-        MUSIC DIRECTOR
-      </div>
-
-      <select
-        id="directorFilter"
-        class="director-select"
-      >
-
-        <option value="All">
-          All Directors
-        </option>
-
+    <label class="field-label" for="directorSelect">Playlist / Artist</label>
+    <div class="select-wrap">
+      <select id="directorSelect">
+        <option value="__all">ALL DIRECTORS</option>
       </select>
+    </div>
+  </header>
 
+  <main>
+    <div class="list-head">
+      <h2 id="listTitle">All Songs</h2>
+      <input id="searchInput" type="search" placeholder="Search song name..." autocomplete="off">
+    </div>
 
-      <!-- STORAGE INFO -->
+    <div class="list-actions">
+      <button id="playAllBtn" class="btn-shuffle">&#128256; Shuffle play</button>
+      <button id="resetBtn" class="btn-ghost" hidden>&#8634; Reset today</button>
+    </div>
+    <p id="countLabel" class="count"></p>
 
-      <div class="library-info">
+    <ul id="songList" class="song-list"></ul>
+    <p id="emptyMsg" class="empty" hidden>No songs yet. Tap <b>+ Import Track</b> to add your downloaded songs.</p>
+  </main>
 
-        <span id="songCount">
-          0 songs
-        </span>
-
-        <span id="storageStatus">
-          Offline storage
-        </span>
-
+  <!-- Player -->
+  <footer class="player">
+    <div class="now">
+      <div class="disc"><span>&#9835;</span></div>
+      <div class="now-text">
+        <div id="nowTitle" class="now-title">No track playing</div>
+        <div id="nowSub" class="now-sub">Select a song from your library</div>
       </div>
+    </div>
+    <div class="seek-row">
+      <span id="curTime">0:00</span>
+      <input id="seek" type="range" min="0" max="100" value="0" step="0.1">
+      <span id="durTime">0:00</span>
+    </div>
+    <div class="controls">
+      <button id="prevBtn" class="ctl small" aria-label="Previous">&#9198;&#xFE0E;</button>
+      <button id="playBtn" class="ctl big" aria-label="Play or pause">&#9654;</button>
+      <button id="nextBtn" class="ctl small" aria-label="Next random song">&#9197;&#xFE0E;</button>
+    </div>
+  </footer>
 
-    </aside>
-
-
-    <!-- MAIN -->
-
-    <main class="main">
-
-      <header class="topbar">
-
-        <div>
-
-          <p class="eyebrow">
-            YOUR LIBRARY
-          </p>
-
-          <h2 id="viewTitle">
-            All Songs
-          </h2>
-
-        </div>
-
-
-        <!-- SEARCH -->
-
-        <input
-          id="searchInput"
-          class="search"
-          type="search"
-          placeholder="🔍 Search songs..."
-        >
-
-      </header>
-
-
-      <!-- TODAY INFO -->
-
-      <div
-        id="todayInfo"
-        class="today-info"
-      >
-        Today's unplayed songs are prioritized in All mode.
+  <!-- Import dialog -->
+  <div id="importModal" class="modal" hidden>
+    <div class="modal-card">
+      <h3>Import tracks</h3>
+      <label for="importDirector">Music director (optional)</label>
+      <input id="importDirector" list="directorList" placeholder="e.g. Anirudh, A. R. Rahman" autocomplete="off">
+      <datalist id="directorList"></datalist>
+      <p class="hint">This director is applied to every song you pick now. You can change it later with Edit.</p>
+      <input id="fileInput" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.flac,.opus" multiple hidden>
+      <p id="importStatus" class="status" hidden></p>
+      <div class="modal-actions">
+        <button id="importCancel" class="btn-ghost">Cancel</button>
+        <button id="importChoose" class="btn-primary">Choose songs</button>
       </div>
-
-
-      <!-- SONG LIST -->
-
-      <section
-        id="songListContainer"
-        class="song-list"
-      ></section>
-
-    </main>
-
-
-    <!-- PLAYER -->
-
-    <section class="player">
-
-      <div class="now-playing">
-
-        <div class="mini-disc">
-          ♫
-        </div>
-
-        <div class="now-text">
-
-          <strong id="playerTitle">
-            No track playing
-          </strong>
-
-          <span id="playerArtist">
-            Choose a song from your library
-          </span>
-
-        </div>
-
-      </div>
-
-
-      <!-- CONTROLS -->
-
-      <div class="player-controls">
-
-        <button
-          id="prevBtn"
-          class="control"
-          aria-label="Previous"
-        >
-          ⏮
-        </button>
-
-        <button
-          id="playBtn"
-          class="control play"
-          aria-label="Play"
-        >
-          ▶
-        </button>
-
-        <button
-          id="nextBtn"
-          class="control"
-          aria-label="Next"
-        >
-          ⏭
-        </button>
-
-      </div>
-
-
-      <!-- PROGRESS -->
-
-      <div class="timeline">
-
-        <span id="currentTime">
-          0:00
-        </span>
-
-        <input
-          id="progressBar"
-          type="range"
-          min="0"
-          max="100"
-          value="0"
-          step="0.1"
-        >
-
-        <span id="totalTime">
-          0:00
-        </span>
-
-      </div>
-
-    </section>
-
+    </div>
   </div>
 
+  <!-- Edit dialog -->
+  <div id="editModal" class="modal" hidden>
+    <div class="modal-card">
+      <h3>Edit song</h3>
+      <label for="editTitle">Song name</label>
+      <input id="editTitle" autocomplete="off">
+      <label for="editDirector">Music director</label>
+      <input id="editDirector" list="directorList" autocomplete="off">
+      <div class="modal-actions">
+        <button id="editCancel" class="btn-ghost">Cancel</button>
+        <button id="editSave" class="btn-primary">Save changes</button>
+      </div>
+    </div>
+  </div>
 
-  <!-- AUDIO ENGINE -->
+  <div id="toast" class="toast" hidden></div>
 
-  <audio
-    id="audioEngine"
-    preload="auto"
-    playsinline
-  ></audio>
-
-
-  <script src="./app.js"></script>
-
-
-  <!-- SERVICE WORKER REGISTRATION -->
-
-  <script>
-
-    if ("serviceWorker" in navigator) {
-
-      window.addEventListener("load", function () {
-
-        navigator.serviceWorker.register("./sw.js", {
-          scope: "./"
-        })
-        .then(function (registration) {
-
-          console.log(
-            "Rishi Music Service Worker registered:",
-            registration.scope
-          );
-
-        })
-        .catch(function (error) {
-
-          console.error(
-            "Rishi Music Service Worker registration failed:",
-            error
-          );
-
-        });
-
-      });
-
-    }
-
-  </script>
-
+  <script src="app.js"></script>
 </body>
-
 </html>
