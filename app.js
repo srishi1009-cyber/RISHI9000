@@ -1,2735 +1,778 @@
-"use strict";
-
-/* =========================================================
-   RISHI MUSIC - COMPLETE APP.JS
-   IndexedDB Version 4
-   No window.prompt() - PWA compatible
-   ========================================================= */
-
-const DB_NAME = "RishiMusicDB";
-const DB_VERSION = 4;
-const STORE_NAME = "tracks";
-
-let db = null;
-let songs = [];
-let currentIndex = -1;
-let currentObjectURL = null;
-let playQueue = [];
-let changingTrack = false;
-
-
-/* =========================================================
-   HTML ELEMENTS
-   ========================================================= */
-
-const audio = document.getElementById("audioEngine");
-const fileInput = document.getElementById("audioFileInput");
-const songList = document.getElementById("songListContainer");
-const directorFilter = document.getElementById("directorFilter");
-const searchInput = document.getElementById("searchInput");
-const playBtn = document.getElementById("playBtn");
-const prevBtn = document.getElementById("prevBtn");
-const nextBtn = document.getElementById("nextBtn");
-const progressBar = document.getElementById("progressBar");
-const currentTime = document.getElementById("currentTime");
-const totalTime = document.getElementById("totalTime");
-const playerTitle = document.getElementById("playerTitle");
-const playerArtist = document.getElementById("playerArtist");
-const viewTitle = document.getElementById("viewTitle");
-
-
-/* =========================================================
-   SERVICE WORKER
-   ========================================================= */
-
-if ("serviceWorker" in navigator) {
-    window.addEventListener("load", function () {
-        navigator.serviceWorker.register("./sw.js")
-            .then(function (registration) {
-                console.log("Service worker ready:", registration.scope);
-            })
-            .catch(function (error) {
-                console.warn("Service worker error:", error);
-            });
-    });
-}
-
-
-/* =========================================================
-   CREATE CUSTOM SONG DETAILS POPUP
-   THIS REPLACES window.prompt()
-   ========================================================= */
-
-function askSongDetails(defaultTitle) {
-
-    return new Promise(function (resolve) {
-
-        const overlay = document.createElement("div");
-
-        overlay.style.position = "fixed";
-        overlay.style.left = "0";
-        overlay.style.top = "0";
-        overlay.style.width = "100%";
-        overlay.style.height = "100%";
-        overlay.style.background = "rgba(0,0,0,0.75)";
-        overlay.style.display = "flex";
-        overlay.style.alignItems = "center";
-        overlay.style.justifyContent = "center";
-        overlay.style.zIndex = "999999";
-        overlay.style.padding = "20px";
-        overlay.style.boxSizing = "border-box";
-
-        const box = document.createElement("div");
-
-        box.style.width = "100%";
-        box.style.maxWidth = "420px";
-        box.style.background =
-            "linear-gradient(145deg,#062b63,#03132f)";
-        box.style.border =
-            "1px solid rgba(0,180,255,0.7)";
-        box.style.borderRadius = "20px";
-        box.style.padding = "25px";
-        box.style.boxShadow =
-            "0 0 35px rgba(0,150,255,0.45)";
-        box.style.color = "white";
-        box.style.boxSizing = "border-box";
-
-        const heading = document.createElement("h2");
-
-        heading.textContent = "Add Song";
-
-        heading.style.marginTop = "0";
-        heading.style.textAlign = "center";
-        heading.style.color = "#62cfff";
-
-        const titleLabel = document.createElement("label");
-
-        titleLabel.textContent = "Song Name";
-
-        titleLabel.style.display = "block";
-        titleLabel.style.marginBottom = "7px";
-
-        const titleInput = document.createElement("input");
-
-        titleInput.type = "text";
-        titleInput.value = defaultTitle;
-        titleInput.placeholder = "Enter song name";
-
-        titleInput.style.width = "100%";
-        titleInput.style.padding = "12px";
-        titleInput.style.borderRadius = "10px";
-        titleInput.style.border = "1px solid #258cff";
-        titleInput.style.background = "#061a38";
-        titleInput.style.color = "white";
-        titleInput.style.fontSize = "16px";
-        titleInput.style.boxSizing = "border-box";
-        titleInput.style.marginBottom = "18px";
-
-        const directorLabel = document.createElement("label");
-
-        directorLabel.textContent =
-            "Music Director";
-
-        directorLabel.style.display = "block";
-        directorLabel.style.marginBottom = "7px";
-
-        const directorInput = document.createElement("input");
-
-        directorInput.type = "text";
-        directorInput.value = "UNKNOWN DIRECTOR";
-        directorInput.placeholder =
-            "Enter music director";
-
-        directorInput.style.width = "100%";
-        directorInput.style.padding = "12px";
-        directorInput.style.borderRadius = "10px";
-        directorInput.style.border = "1px solid #258cff";
-        directorInput.style.background = "#061a38";
-        directorInput.style.color = "white";
-        directorInput.style.fontSize = "16px";
-        directorInput.style.boxSizing = "border-box";
-        directorInput.style.marginBottom = "20px";
-
-        const buttonArea = document.createElement("div");
-
-        buttonArea.style.display = "flex";
-        buttonArea.style.gap = "10px";
-        buttonArea.style.justifyContent = "flex-end";
-
-        const cancelButton =
-            document.createElement("button");
-
-        cancelButton.textContent = "Cancel";
-
-        cancelButton.style.padding = "11px 18px";
-        cancelButton.style.borderRadius = "10px";
-        cancelButton.style.border = "none";
-        cancelButton.style.cursor = "pointer";
-
-        const saveButton =
-            document.createElement("button");
-
-        saveButton.textContent = "Save Song";
-
-        saveButton.style.padding = "11px 18px";
-        saveButton.style.borderRadius = "10px";
-        saveButton.style.border = "none";
-        saveButton.style.cursor = "pointer";
-        saveButton.style.background =
-            "linear-gradient(135deg,#008cff,#0055ff)";
-        saveButton.style.color = "white";
-        saveButton.style.fontWeight = "bold";
-
-        buttonArea.appendChild(cancelButton);
-        buttonArea.appendChild(saveButton);
-
-        box.appendChild(heading);
-        box.appendChild(titleLabel);
-        box.appendChild(titleInput);
-        box.appendChild(directorLabel);
-        box.appendChild(directorInput);
-        box.appendChild(buttonArea);
-
-        overlay.appendChild(box);
-        document.body.appendChild(overlay);
-
-        titleInput.focus();
-        titleInput.select();
-
-
-        function close(result) {
-
-            if (overlay.parentNode) {
-                overlay.parentNode.removeChild(overlay);
-            }
-
-            resolve(result);
-        }
-
-
-        cancelButton.onclick = function () {
-
-            close(null);
-
-        };
-
-
-        saveButton.onclick = function () {
-
-            const title =
-                titleInput.value.trim() ||
-                defaultTitle;
-
-            const director =
-                directorInput.value.trim() ||
-                "UNKNOWN DIRECTOR";
-
-            close({
-                title: title,
-                director: director
-            });
-
-        };
-
-
-        overlay.onclick = function (event) {
-
-            if (event.target === overlay) {
-                close(null);
-            }
-
-        };
-
-
-        titleInput.onkeydown = function (event) {
-
-            if (event.key === "Enter") {
-                directorInput.focus();
-            }
-
-        };
-
-
-        directorInput.onkeydown = function (event) {
-
-            if (event.key === "Enter") {
-                saveButton.click();
-            }
-
-            if (event.key === "Escape") {
-                cancelButton.click();
-            }
-
-        };
-
-    });
-}
-
-
-/* =========================================================
-   OPEN DATABASE
-   ========================================================= */
-
-function openDatabase() {
-
-    return new Promise(function (resolve, reject) {
-
-        const request =
-            indexedDB.open(
-                DB_NAME,
-                DB_VERSION
-            );
-
-
-        request.onupgradeneeded = function (event) {
-
-            const database = event.target.result;
-            const transaction = event.target.transaction;
-
-            let store;
-
-
-            if (
-                !database.objectStoreNames.contains(
-                    STORE_NAME
-                )
-            ) {
-
-                store =
-                    database.createObjectStore(
-                        STORE_NAME,
-                        {
-                            keyPath: "id",
-                            autoIncrement: true
-                        }
-                    );
-
-                console.log(
-                    "Created tracks store."
-                );
-
-            } else {
-
-                store =
-                    transaction.objectStore(
-                        STORE_NAME
-                    );
-
-            }
-
-
-            /*
-             * Copy old stores into the new store.
-             */
-
-            const oldStores =
-                Array.from(
-                    database.objectStoreNames
-                ).filter(function (name) {
-
-                    return name !== STORE_NAME;
-
-                });
-
-
-            oldStores.forEach(function (oldName) {
-
-                try {
-
-                    const oldStore =
-                        transaction.objectStore(
-                            oldName
-                        );
-
-                    const cursorRequest =
-                        oldStore.openCursor();
-
-
-                    cursorRequest.onsuccess =
-                        function () {
-
-                            const cursor =
-                                cursorRequest.result;
-
-                            if (!cursor) {
-                                return;
-                            }
-
-                            try {
-
-                                const oldSong =
-                                    cursor.value;
-
-                                const copy =
-                                    Object.assign(
-                                        {},
-                                        oldSong
-                                    );
-
-                                /*
-                                 * Don't copy an old
-                                 * incompatible key.
-                                 */
-
-                                delete copy.id;
-
-                                store.add(copy);
-
-                            } catch (error) {
-
-                                console.warn(
-                                    "Migration error:",
-                                    error
-                                );
-
-                            }
-
-                            cursor.continue();
-
-                        };
-
-                } catch (error) {
-
-                    console.warn(
-                        "Old store error:",
-                        error
-                    );
-
-                }
-
-            });
-
-        };
-
-
-        request.onsuccess = function (event) {
-
-            db = event.target.result;
-
-            console.log(
-                "RishiMusicDB opened:",
-                db.version
-            );
-
-            console.log(
-                "Stores:",
-                Array.from(
-                    db.objectStoreNames
-                )
-            );
-
-
-            if (
-                !db.objectStoreNames.contains(
-                    STORE_NAME
-                )
-            ) {
-
-                reject(
-                    new Error(
-                        "tracks object store was not created."
-                    )
-                );
-
-                return;
-
-            }
-
-
-            resolve(db);
-
-        };
-
-
-        request.onerror = function () {
-
-            reject(
-                request.error ||
-                new Error(
-                    "Could not open database."
-                )
-            );
-
-        };
-
-
-        request.onblocked = function () {
-
-            reject(
-                new Error(
-                    "Database is blocked. Close other Rishi Music tabs."
-                )
-            );
-
-        };
-
-    });
-}
-
-
-/* =========================================================
-   ENSURE DATABASE
-   ========================================================= */
-
-async function ensureDatabase() {
-
-    if (
-        db &&
-        db.objectStoreNames.contains(
-            STORE_NAME
-        )
-    ) {
-
-        return db;
-    }
-
-    return await openDatabase();
-}
-
-
-/* =========================================================
-   GET ALL SONGS
-   ========================================================= */
-
-function getAllSongs() {
-
-    return new Promise(function (resolve, reject) {
-
-        try {
-
-            const transaction =
-                db.transaction(
-                    STORE_NAME,
-                    "readonly"
-                );
-
-            const store =
-                transaction.objectStore(
-                    STORE_NAME
-                );
-
-            const request =
-                store.getAll();
-
-
-            request.onsuccess = function () {
-
-                resolve(
-                    request.result || []
-                );
-
-            };
-
-
-            request.onerror = function () {
-
-                reject(
-                    request.error
-                );
-
-            };
-
-        } catch (error) {
-
-            reject(error);
-
-        }
-
-    });
-}
-
-
-/* =========================================================
-   GET SONG
-   ========================================================= */
-
-function getSong(id) {
-
-    return new Promise(function (resolve, reject) {
-
-        try {
-
-            const transaction =
-                db.transaction(
-                    STORE_NAME,
-                    "readonly"
-                );
-
-            const store =
-                transaction.objectStore(
-                    STORE_NAME
-                );
-
-            const request =
-                store.get(id);
-
-
-            request.onsuccess = function () {
-
-                resolve(
-                    request.result
-                );
-
-            };
-
-
-            request.onerror = function () {
-
-                reject(
-                    request.error
-                );
-
-            };
-
-        } catch (error) {
-
-            reject(error);
-
-        }
-
-    });
-}
-
-
-/* =========================================================
-   SAVE SONG
-   ========================================================= */
-
-function saveSong(song) {
-
-    return new Promise(function (resolve, reject) {
-
-        try {
-
-            const transaction =
-                db.transaction(
-                    STORE_NAME,
-                    "readwrite"
-                );
-
-            const store =
-                transaction.objectStore(
-                    STORE_NAME
-                );
-
-            const request =
-                store.add(song);
-
-
-            request.onsuccess = function (event) {
-
-                resolve(
-                    event.target.result
-                );
-
-            };
-
-
-            request.onerror = function () {
-
-                reject(
-                    request.error
-                );
-
-            };
-
-
-            transaction.onabort = function () {
-
-                reject(
-                    transaction.error ||
-                    new Error(
-                        "Database transaction aborted."
-                    )
-                );
-
-            };
-
-        } catch (error) {
-
-            reject(error);
-
-        }
-
-    });
-}
-
-
-/* =========================================================
-   UPDATE SONG
-   ========================================================= */
-
-function updateSong(song) {
-
-    return new Promise(function (resolve, reject) {
-
-        try {
-
-            const transaction =
-                db.transaction(
-                    STORE_NAME,
-                    "readwrite"
-                );
-
-            const store =
-                transaction.objectStore(
-                    STORE_NAME
-                );
-
-            const request =
-                store.put(song);
-
-
-            request.onsuccess = function () {
-                resolve();
-            };
-
-
-            request.onerror = function () {
-
-                reject(
-                    request.error
-                );
-
-            };
-
-        } catch (error) {
-
-            reject(error);
-
-        }
-
-    });
-}
-
-
-/* =========================================================
-   DELETE SONG
-   ========================================================= */
-
-function deleteSongFromDB(id) {
-
-    return new Promise(function (resolve, reject) {
-
-        try {
-
-            const transaction =
-                db.transaction(
-                    STORE_NAME,
-                    "readwrite"
-                );
-
-            const store =
-                transaction.objectStore(
-                    STORE_NAME
-                );
-
-            const request =
-                store.delete(id);
-
-
-            request.onsuccess = function () {
-                resolve();
-            };
-
-
-            request.onerror = function () {
-
-                reject(
-                    request.error
-                );
-
-            };
-
-        } catch (error) {
-
-            reject(error);
-
-        }
-
-    });
-}
-
-
-/* =========================================================
-   SONG INFORMATION
-   ========================================================= */
-
-function getSongTitle(song) {
-
-    return (
-        song.title ||
-        song.name ||
-        song.songName ||
-        song.trackName ||
-        song.fileName ||
-        "Unknown Song"
-    );
-}
-
-
-function getSongDirector(song) {
-
-    return (
-        song.director ||
-        song.musicDirector ||
-        song.artist ||
-        song.composer ||
-        "UNKNOWN DIRECTOR"
-    );
-}
-
-
-function getAudioBlob(song) {
-
-    const values = [
-
-        song.blob,
-        song.audioBlob,
-        song.fileBlob,
-        song.audio,
-        song.file
-
-    ];
-
-
-    for (
-        const value of values
-    ) {
-
-        if (
-            value instanceof Blob
-        ) {
-
-            return value;
-        }
-
-    }
-
-
-    return null;
-}
-
-
-/* =========================================================
-   MIME TYPE
-   ========================================================= */
-
-function guessMimeType(filename) {
-
-    const ext =
-        filename
-            .split(".")
-            .pop()
-            .toLowerCase();
-
-
-    const types = {
-
-        mp3: "audio/mpeg",
-        m4a: "audio/mp4",
-        mp4: "audio/mp4",
-        wav: "audio/wav",
-        ogg: "audio/ogg",
-        oga: "audio/ogg",
-        opus: "audio/ogg",
-        webm: "audio/webm",
-        aac: "audio/aac",
-        flac: "audio/flac"
-
+/* RISHI MUSIC
+   - Songs are copied into IndexedDB, so they stay even if you delete the original files.
+   - Playback is random. A song played once today is marked "Played today" and is skipped
+     by shuffle / next / auto-play until you tap it yourself (or press Reset today). */
+
+'use strict';
+
+/* ================= Database ================= */
+const DB_NAME = 'rishi-music-db';
+const STORE = 'songs';
+let db;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
     };
-
-
-    return (
-        types[ext] ||
-        "audio/mpeg"
-    );
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
 }
 
-
-/* =========================================================
-   IMPORT SONGS
-   ========================================================= */
-
-fileInput.addEventListener(
-    "change",
-    async function (event) {
-
-        const files =
-            Array.from(
-                event.target.files || []
-            );
-
-
-        if (
-            files.length === 0
-        ) {
-
-            return;
-        }
-
-
-        let imported = 0;
-        let failed = 0;
-        const errors = [];
-
-
-        try {
-
-            await ensureDatabase();
-
-
-            for (
-                const file of files
-            ) {
-
-                try {
-
-                    if (
-                        !file ||
-                        file.size <= 0
-                    ) {
-
-                        throw new Error(
-                            "File is empty."
-                        );
-
-                    }
-
-
-                    const defaultTitle =
-                        file.name.replace(
-                            /\.[^/.]+$/,
-                            ""
-                        );
-
-
-                    /*
-                     * IMPORTANT:
-                     * This is our custom PWA
-                     * popup instead of prompt().
-                     */
-
-                    const details =
-                        await askSongDetails(
-                            defaultTitle
-                        );
-
-
-                    if (!details) {
-
-                        console.log(
-                            "Import cancelled:",
-                            file.name
-                        );
-
-                        continue;
-                    }
-
-
-                    const mime =
-                        file.type ||
-                        guessMimeType(
-                            file.name
-                        );
-
-
-                    const blob =
-                        new Blob(
-                            [file],
-                            {
-                                type: mime
-                            }
-                        );
-
-
-                    const song = {
-
-                        title:
-                            details.title,
-
-                        director:
-                            details.director,
-
-                        fileName:
-                            file.name,
-
-                        mimeType:
-                            mime,
-
-                        size:
-                            file.size,
-
-                        blob:
-                            blob,
-
-                        addedAt:
-                            Date.now(),
-
-                        lastPlayedDate:
-                            "",
-
-                        lastPlayedAt:
-                            0,
-
-                        playCount:
-                            0
-
-                    };
-
-
-                    await saveSong(
-                        song
-                    );
-
-
-                    imported++;
-
-
-                    console.log(
-                        "Imported:",
-                        details.title
-                    );
-
-
-                } catch (error) {
-
-                    failed++;
-
-
-                    errors.push(
-                        file.name +
-                        ": " +
-                        (
-                            error.message ||
-                            String(error)
-                        )
-                    );
-
-
-                    console.error(
-                        "Import failed:",
-                        file.name,
-                        error
-                    );
-
-                }
-
-            }
-
-
-            fileInput.value = "";
-
-
-            await reloadLibrary();
-
-
-            if (
-                imported > 0
-            ) {
-
-                let message =
-                    imported +
-                    (
-                        imported === 1
-                            ? " song imported successfully."
-                            : " songs imported successfully."
-                    );
-
-
-                if (
-                    failed > 0
-                ) {
-
-                    message +=
-                        "\n\nFailed: " +
-                        failed;
-
-                }
-
-
-                alert(
-                    message
-                );
-
-            } else if (
-                failed > 0
-            ) {
-
-                alert(
-                    "NO SONG WAS IMPORTED.\n\n" +
-                    errors.join("\n")
-                );
-
-            }
-
-
-        } catch (error) {
-
-            fileInput.value = "";
-
-
-            console.error(
-                "Import system error:",
-                error
-            );
-
-
-            alert(
-                "Import system error:\n\n" +
-                (
-                    error.message ||
-                    String(error)
-                )
-            );
-
-        }
-
-    }
-);
-
-
-/* =========================================================
-   RELOAD LIBRARY
-   ========================================================= */
-
-async function reloadLibrary() {
-
-    await ensureDatabase();
-
-
-    songs =
-        await getAllSongs();
-
-
-    songs.sort(
-        function (a, b) {
-
-            return getSongTitle(a)
-                .localeCompare(
-                    getSongTitle(b)
-                );
-
-        }
-    );
-
-
-    updateDirectorList();
-    renderSongs();
-
-
-    console.log(
-        "Total songs:",
-        songs.length
-    );
+function tx(mode, fn) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(STORE, mode);
+    const result = fn(t.objectStore(STORE));
+    t.oncomplete = () => resolve(result && 'result' in result ? result.result : undefined);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
 }
 
+const dbAll = () => tx('readonly', s => s.getAll());
+const dbAdd = song => tx('readwrite', s => s.add(song));
+const dbPut = song => tx('readwrite', s => s.put(song));
+const dbDelete = id => tx('readwrite', s => s.delete(id));
 
-/* =========================================================
-   DIRECTOR FILTER
-   ========================================================= */
-
-function updateDirectorList() {
-
-    const previous =
-        directorFilter.value ||
-        "All";
-
-
-    const directors = [];
-
-
-    songs.forEach(function (song) {
-
-        const director =
-            getSongDirector(song);
-
-
-        if (
-            !directors.includes(
-                director
-            )
-        ) {
-
-            directors.push(
-                director
-            );
-
-        }
-
-    });
-
-
-    directors.sort();
-
-
-    directorFilter.innerHTML = "";
-
-
-    const allOption =
-        document.createElement(
-            "option"
-        );
-
-
-    allOption.value = "All";
-    allOption.textContent = "All";
-
-
-    directorFilter.appendChild(
-        allOption
-    );
-
-
-    directors.forEach(function (director) {
-
-        const option =
-            document.createElement(
-                "option"
-            );
-
-
-        option.value =
-            director;
-
-        option.textContent =
-            director;
-
-
-        directorFilter.appendChild(
-            option
-        );
-
-    });
-
-
-    if (
-        previous === "All" ||
-        directors.includes(previous)
-    ) {
-
-        directorFilter.value =
-            previous;
-
-    } else {
-
-        directorFilter.value =
-            "All";
-
-    }
-}
-
-
-/* =========================================================
-   TODAY
-   ========================================================= */
+/* ================= "Played today" memory ================= */
+const PLAYED_KEY = 'rishi-played-v1';
 
 function todayKey() {
-
-    const date =
-        new Date();
-
-
-    return (
-        date.getFullYear() +
-        "-" +
-        String(
-            date.getMonth() + 1
-        ).padStart(2, "0") +
-        "-" +
-        String(
-            date.getDate()
-        ).padStart(2, "0")
-    );
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
-
-function playedToday(song) {
-
-    return (
-        song.lastPlayedDate ===
-        todayKey()
-    );
+function loadPlayed() {
+  try {
+    const map = JSON.parse(localStorage.getItem(PLAYED_KEY) || '{}');
+    const t = todayKey();
+    Object.keys(map).forEach(k => { if (map[k] !== t) delete map[k]; });
+    return map;
+  } catch (e) { return {}; }
 }
 
+let playedMap = loadPlayed();
 
-/* =========================================================
-   MARK PLAYED
-   ========================================================= */
-
-async function markPlayed(song) {
-
-    song.lastPlayedDate =
-        todayKey();
-
-
-    song.lastPlayedAt =
-        Date.now();
-
-
-    song.playCount =
-        Number(
-            song.playCount || 0
-        ) + 1;
-
-
-    await updateSong(
-        song
-    );
+function savePlayed() {
+  try { localStorage.setItem(PLAYED_KEY, JSON.stringify(playedMap)); } catch (e) {}
 }
 
+const isPlayedToday = id => playedMap[id] === todayKey();
 
-/* =========================================================
-   RENDER SONGS
-   ========================================================= */
+/* ================= State ================= */
+const UNKNOWN = 'Unknown Director';
+const MARK_AFTER_SECONDS = 5;
 
-function renderSongs() {
+let songs = [];
+let queue = [];            // ids that shuffle is allowed to choose from (the list you started from)
+let history = [];          // ids in the order they were played (for the Previous button)
+let badIds = new Set();    // songs that failed to decode this session
+let currentId = null;
+let currentUrl = null;
+let markedCurrent = false;
+let editingId = null;
+let seeking = false;
+let failStreak = 0;
+let stallTimer = null;
 
-    songList.innerHTML = "";
+const audio = new Audio();
+audio.preload = 'auto';
 
+/* ================= Elements ================= */
+const $ = id => document.getElementById(id);
+const els = {
+  list: $('songList'), empty: $('emptyMsg'), title: $('listTitle'), count: $('countLabel'),
+  search: $('searchInput'), select: $('directorSelect'), playAll: $('playAllBtn'), reset: $('resetBtn'),
+  importBtn: $('importBtn'), backup: $('backupBtn'), sync: $('syncBtn'), restore: $('restoreBtn'), restoreInput: $('restoreInput'), importModal: $('importModal'), importDirector: $('importDirector'),
+  fileInput: $('fileInput'), importChoose: $('importChoose'), importCancel: $('importCancel'),
+  importStatus: $('importStatus'),
+  editModal: $('editModal'), editTitle: $('editTitle'), editDirector: $('editDirector'),
+  editSave: $('editSave'), editCancel: $('editCancel'),
+  dirList: $('directorList'),
+  prev: $('prevBtn'), play: $('playBtn'), next: $('nextBtn'),
+  seek: $('seek'), cur: $('curTime'), dur: $('durTime'),
+  nowTitle: $('nowTitle'), nowSub: $('nowSub'), toast: $('toast')
+};
 
-    const selected =
-        directorFilter.value ||
-        "All";
+/* ================= Helpers ================= */
+function fmt(sec) {
+  if (!isFinite(sec) || sec < 0) sec = 0;
+  return Math.floor(sec / 60) + ':' + String(Math.floor(sec % 60)).padStart(2, '0');
+}
 
+function cleanName(filename) {
+  return filename.replace(/\.[^.]+$/, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim() || 'Untitled';
+}
 
-    const search =
-        searchInput.value
-            .trim()
-            .toLowerCase();
+let toastTimer;
+function toast(msg) {
+  els.toast.textContent = msg;
+  els.toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { els.toast.hidden = true; }, 3000);
+}
 
+function setRangeFill(pct) { els.seek.style.setProperty('--pct', pct + '%'); }
 
-    const visible =
-        songs.filter(function (song) {
+const byTitle = (a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+const directorOf = s => (s.director && s.director.trim()) || UNKNOWN;
 
-            const title =
-                getSongTitle(song)
-                    .toLowerCase();
+function artStyle(title) {
+  let h = 0;
+  for (let i = 0; i < title.length; i++) h = (h * 31 + title.charCodeAt(i)) >>> 0;
+  const hue = 190 + (h % 90);   // cyan -> blue -> violet
+  return 'background:linear-gradient(135deg,hsl(' + hue + ' 90% 62%),hsl(' + (hue + 28) + ' 85% 38%))';
+}
 
-            const director =
-                getSongDirector(song);
+/* ================= Rendering ================= */
+function directors() {
+  return [...new Set(songs.map(directorOf))].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
 
+function renderDirectorSelect() {
+  const keep = els.select.value || '__all';
+  els.select.innerHTML = '';
+  els.select.add(new Option('ALL DIRECTORS', '__all'));
+  directors().forEach(d => els.select.add(new Option(d.toUpperCase(), d)));
+  els.select.value = [...els.select.options].some(o => o.value === keep) ? keep : '__all';
 
-            return (
+  els.dirList.innerHTML = '';
+  directors().filter(d => d !== UNKNOWN).forEach(d => {
+    const o = document.createElement('option');
+    o.value = d;
+    els.dirList.appendChild(o);
+  });
+}
 
-                (
-                    selected === "All" ||
-                    director === selected
-                )
+function visibleSongs() {
+  const dir = els.select.value;
+  const q = els.search.value.trim().toLowerCase();
+  return songs
+    .filter(s => dir === '__all' || directorOf(s) === dir)
+    .filter(s => !q || s.title.toLowerCase().includes(q))
+    .sort(byTitle);
+}
 
-                &&
+function renderList() {
+  const list = visibleSongs();
+  const dir = els.select.value;
+  const playedCount = list.filter(s => isPlayedToday(s.id)).length;
 
-                (
-                    search === "" ||
-                    title.includes(search)
-                )
+  els.title.textContent = dir === '__all' ? 'All Songs' : dir;
+  els.count.textContent = list.length + (list.length === 1 ? ' song' : ' songs') +
+    (playedCount ? ' \u00B7 ' + playedCount + ' played today' : '');
+  if (els.reset) els.reset.hidden = Object.keys(playedMap).length === 0;
+  els.playAll.hidden = list.length === 0;
+  els.empty.hidden = songs.length > 0;
+  els.list.innerHTML = '';
 
-            );
+  list.forEach(song => {
+    const played = isPlayedToday(song.id);
+    const li = document.createElement('li');
+    li.className = 'song' + (song.id === currentId ? ' playing' : '') + (played ? ' played' : '');
 
-        });
+    const art = document.createElement('div');
+    art.className = 'art';
+    art.setAttribute('style', artStyle(song.title));
+    const letter = document.createElement('span');
+    letter.className = 'letter';
+    letter.textContent = (song.title.trim()[0] || '\u266B').toUpperCase();
+    const eq = document.createElement('span');
+    eq.className = 'eq';
+    eq.innerHTML = '<i></i><i></i><i></i>';
+    art.append(letter, eq);
 
-
-    if (
-        visible.length === 0
-    ) {
-
-        const empty =
-            document.createElement(
-                "div"
-            );
-
-
-        empty.className =
-            "song-item";
-
-
-        empty.textContent =
-            songs.length === 0
-                ? "No songs imported yet."
-                : "No songs found.";
-
-
-        songList.appendChild(
-            empty
-        );
-
-
-        return;
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = song.title;
+    const d = document.createElement('div');
+    d.className = 'dir';
+    d.textContent = directorOf(song);
+    meta.append(name, d);
+    if (played) {
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = '\u2713 Played today';
+      meta.appendChild(badge);
     }
-
-
-    visible.forEach(function (song) {
-
-        const item =
-            document.createElement(
-                "div"
-            );
-
-
-        item.className =
-            "song-item";
-
-
-        const info =
-            document.createElement(
-                "div"
-            );
-
-
-        info.className =
-            "song-info";
-
-
-        const title =
-            document.createElement(
-                "div"
-            );
-
-
-        title.className =
-            "song-title";
-
-
-        title.textContent =
-            getSongTitle(song);
-
-
-        const director =
-            document.createElement(
-                "div"
-            );
-
-
-        director.className =
-            "song-director";
-
-
-        director.textContent =
-            getSongDirector(song);
-
-
-        info.appendChild(title);
-        info.appendChild(director);
-
-
-        if (
-            playedToday(song)
-        ) {
-
-            const played =
-                document.createElement(
-                    "div"
-                );
-
-
-            played.textContent =
-                "✓ PLAYED TODAY";
-
-
-            played.style.fontSize =
-                "11px";
-
-
-            info.appendChild(
-                played
-            );
-
-        }
-
-
-        const buttons =
-            document.createElement(
-                "div"
-            );
-
-
-        buttons.className =
-            "song-buttons";
-
-
-        const play =
-            document.createElement(
-                "button"
-            );
-
-
-        play.textContent =
-            "▶";
-
-
-        play.title =
-            "Play";
-
-
-        play.onclick =
-            function (event) {
-
-                event.stopPropagation();
-
-                playSongByID(
-                    song.id
-                );
-
-            };
-
-
-        const edit =
-            document.createElement(
-                "button"
-            );
-
-
-        edit.textContent =
-            "✎";
-
-
-        edit.title =
-            "Edit";
-
-
-        edit.onclick =
-            function (event) {
-
-                event.stopPropagation();
-
-                editSong(
-                    song.id
-                );
-
-            };
-
-
-        const remove =
-            document.createElement(
-                "button"
-            );
-
-
-        remove.textContent =
-            "🗑";
-
-
-        remove.title =
-            "Delete";
-
-
-        remove.onclick =
-            function (event) {
-
-                event.stopPropagation();
-
-                deleteSong(
-                    song.id
-                );
-
-            };
-
-
-        buttons.appendChild(play);
-        buttons.appendChild(edit);
-        buttons.appendChild(remove);
-
-
-        item.appendChild(info);
-        item.appendChild(buttons);
-
-
-        item.onclick =
-            function () {
-
-                playSongByID(
-                    song.id
-                );
-
-            };
-
-
-        songList.appendChild(item);
-
-    });
+    meta.addEventListener('click', () => playFromList(song.id));
+
+    const edit = document.createElement('button');
+    edit.className = 'pill-edit';
+    edit.textContent = '\u270E Edit';
+    edit.addEventListener('click', () => openEdit(song.id));
+
+    const del = document.createElement('button');
+    del.className = 'round del';
+    del.setAttribute('aria-label', 'Delete');
+    del.textContent = '\uD83D\uDDD1\uFE0F';
+    del.addEventListener('click', () => removeSong(song.id));
+
+    const go = document.createElement('button');
+    go.className = 'round go';
+    go.setAttribute('aria-label', 'Play');
+    go.textContent = '\u25B6';
+    go.addEventListener('click', () => playFromList(song.id));
+
+    li.append(art, meta, edit, del, go);
+    els.list.appendChild(li);
+  });
 }
 
-
-/* =========================================================
-   PLAY SONG
-   ========================================================= */
-
-async function playSongByID(id) {
-
-    const index =
-        songs.findIndex(function (song) {
-
-            return String(song.id) ===
-                String(id);
-
-        });
-
-
-    if (
-        index === -1
-    ) {
-
-        return;
-    }
-
-
-    await playSongAtIndex(
-        index
-    );
+function refresh() {
+  renderDirectorSelect();
+  renderList();
 }
 
+/* ================= Playback ================= */
+function markPlayed(id) {
+  if (id == null || isPlayedToday(id)) return;
+  playedMap[id] = todayKey();
+  savePlayed();
+  renderList();
+}
 
-async function playSongAtIndex(index) {
+/* Tapping a song yourself always plays it, even if it was played today. */
+function playFromList(id) {
+  queue = visibleSongs().map(s => s.id);
+  failStreak = 0;
+  badIds.delete(id);
+  playSong(id);
+}
 
-    if (
-        changingTrack
-    ) {
+/* Random pick from the current list, skipping songs already played today. */
+function pickRandom() {
+  if (!queue.length) queue = visibleSongs().map(s => s.id);
+  const alive = new Set(songs.map(s => s.id));
+  const pool = queue.filter(id =>
+    alive.has(id) && id !== currentId && !badIds.has(id) && !isPlayedToday(id));
+  if (!pool.length) return null;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
-        return;
+function shufflePlay() {
+  const list = visibleSongs();
+  if (!list.length) return;
+  queue = list.map(s => s.id);
+  failStreak = 0;
+  const id = pickRandom();
+  if (id == null) {
+    toast('Everything here is already played today. Tap a song to play it, or Reset today.');
+    return;
+  }
+  playSong(id);
+}
+
+function playSong(id, fromHistory) {
+  const song = songs.find(s => s.id === id);
+  if (!song) return;
+
+  clearTimeout(stallTimer);
+  currentId = id;
+  markedCurrent = isPlayedToday(id);
+
+  if (!fromHistory && history[history.length - 1] !== id) {
+    history.push(id);
+    if (history.length > 200) history.shift();
+  }
+
+  if (currentUrl) URL.revokeObjectURL(currentUrl);
+  currentUrl = URL.createObjectURL(song.blob);
+  audio.src = currentUrl;
+  audio.load();
+  const p = audio.play();
+  if (p && p.catch) p.catch(() => updatePlayIcon());
+
+  els.nowTitle.textContent = song.title;
+  els.nowSub.textContent = directorOf(song);
+  els.seek.value = 0;
+  setRangeFill(0);
+  els.cur.textContent = '0:00';
+  els.dur.textContent = '0:00';
+  document.body.classList.remove('is-idle');
+  updateMediaSession(song);
+  renderList();
+}
+
+/* auto = true when the previous song ended by itself */
+function nextTrack(auto) {
+  const id = pickRandom();
+  if (id == null) {
+    if (auto) {
+      els.nowSub.textContent = 'All songs in this list are played today';
+      updatePlayIcon();
     }
+    toast('No more songs to shuffle. All are played today.');
+    return;
+  }
+  playSong(id);
+}
 
+function prevTrack() {
+  if (audio.currentTime > 3 || history.length < 2) { audio.currentTime = 0; return; }
+  history.pop();                               // drop the current song
+  playSong(history[history.length - 1], true); // go back to the one before it
+}
 
-    if (
-        index < 0 ||
-        index >= songs.length
-    ) {
+function togglePlay() {
+  if (!currentId) { shufflePlay(); return; }
+  if (audio.paused) audio.play().catch(() => {});
+  else audio.pause();
+}
 
-        return;
-    }
+function updatePlayIcon() {
+  els.play.innerHTML = audio.paused ? '&#9654;' : '&#10074;&#10074;';
+  document.body.classList.toggle('is-paused', audio.paused);
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.playbackState = audio.paused ? 'paused' : 'playing';
+  }
+}
 
+audio.addEventListener('ended', () => {
+  markPlayed(currentId);
+  nextTrack(true);
+});
+audio.addEventListener('play', updatePlayIcon);
+audio.addEventListener('pause', updatePlayIcon);
+audio.addEventListener('playing', () => {
+  failStreak = 0;
+  clearTimeout(stallTimer);
+  updatePlayIcon();
+});
 
-    changingTrack = true;
+/* Anti-stuck: if playback stalls for 5 seconds, reload from the same spot */
+function recoverFromStall() {
+  if (!currentId || audio.paused || audio.readyState >= 3) return;
+  const t = audio.currentTime;
+  audio.load();
+  audio.addEventListener('loadedmetadata', function once() {
+    audio.removeEventListener('loadedmetadata', once);
+    try { audio.currentTime = t; } catch (e) {}
+    audio.play().catch(() => {});
+  });
+}
+['waiting', 'stalled'].forEach(evt => {
+  audio.addEventListener(evt, () => {
+    clearTimeout(stallTimer);
+    stallTimer = setTimeout(recoverFromStall, 5000);
+  });
+});
 
+/* A broken file is skipped instead of stopping the music */
+audio.addEventListener('error', () => {
+  if (currentId == null) return;
+  badIds.add(currentId);
+  failStreak++;
+  if (failStreak >= Math.max(queue.length, 1)) {
+    toast('Could not play these songs. Try importing them again.');
+    return;
+  }
+  toast('Skipping a track that would not play');
+  setTimeout(() => nextTrack(true), 400);
+});
 
+audio.addEventListener('loadedmetadata', () => {
+  els.dur.textContent = fmt(audio.duration);
+  els.seek.max = isFinite(audio.duration) ? audio.duration : 100;
+});
+
+audio.addEventListener('timeupdate', () => {
+  if (!markedCurrent && audio.currentTime >= MARK_AFTER_SECONDS) {
+    markedCurrent = true;
+    markPlayed(currentId);
+  }
+  if (seeking) return;
+  els.cur.textContent = fmt(audio.currentTime);
+  if (isFinite(audio.duration) && audio.duration > 0) {
+    els.seek.value = audio.currentTime;
+    setRangeFill((audio.currentTime / audio.duration) * 100);
+  }
+});
+
+els.seek.addEventListener('input', () => {
+  seeking = true;
+  els.cur.textContent = fmt(els.seek.value);
+  setRangeFill((els.seek.value / (parseFloat(els.seek.max) || 1)) * 100);
+});
+els.seek.addEventListener('change', () => {
+  audio.currentTime = parseFloat(els.seek.value);
+  seeking = false;
+});
+
+/* Lock-screen / notification controls */
+function updateMediaSession(song) {
+  if (!('mediaSession' in navigator)) return;
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: song.title,
+    artist: directorOf(song),
+    album: 'Rishi Music',
+    artwork: [
+      { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' }
+    ]
+  });
+}
+
+if ('mediaSession' in navigator) {
+  const ms = navigator.mediaSession;
+  const safe = (name, fn) => { try { ms.setActionHandler(name, fn); } catch (e) {} };
+  safe('play', () => audio.play().catch(() => {}));
+  safe('pause', () => audio.pause());
+  safe('previoustrack', prevTrack);
+  safe('nexttrack', () => nextTrack(false));
+  safe('seekto', d => { if (d.seekTime != null) audio.currentTime = d.seekTime; });
+}
+
+/* ================= Import ================= */
+function openImport() {
+  els.importDirector.value = '';
+  els.importStatus.hidden = true;
+  els.importChoose.disabled = false;
+  els.importCancel.disabled = false;
+  els.importModal.hidden = false;
+}
+function closeImport() { els.importModal.hidden = true; }
+
+async function importFiles(files) {
+  const list = [...files].filter(f =>
+    f.type.startsWith('audio/') || /\.(mp3|m4a|aac|wav|ogg|flac|opus|weba)$/i.test(f.name));
+  if (!list.length) { toast('No audio files selected'); return; }
+
+  const director = els.importDirector.value.trim() || UNKNOWN;
+  els.importChoose.disabled = true;
+  els.importCancel.disabled = true;
+  els.importStatus.hidden = false;
+
+  if (navigator.storage && navigator.storage.persist) {
+    try { await navigator.storage.persist(); } catch (e) {}
+  }
+
+  let saved = 0;
+  for (let i = 0; i < list.length; i++) {
+    const f = list[i];
+    els.importStatus.textContent = 'Saving ' + (i + 1) + ' of ' + list.length + '\u2026';
     try {
-
-        const song =
-            await getSong(
-                songs[index].id
-            );
-
-
-        if (!song) {
-            throw new Error(
-                "Song not found in database."
-            );
-        }
-
-
-        const blob =
-            getAudioBlob(song);
-
-
-        if (!blob) {
-            throw new Error(
-                "Audio data is missing."
-            );
-        }
-
-
-        audio.pause();
-        audio.removeAttribute("src");
-        audio.load();
-
-
-        if (
-            currentObjectURL
-        ) {
-
-            URL.revokeObjectURL(
-                currentObjectURL
-            );
-
-        }
-
-
-        currentObjectURL =
-            URL.createObjectURL(
-                blob
-            );
-
-
-        audio.src =
-            currentObjectURL;
-
-
-        currentIndex =
-            index;
-
-
-        playerTitle.textContent =
-            getSongTitle(song);
-
-
-        playerArtist.textContent =
-            getSongDirector(song);
-
-
-        progressBar.value = 0;
-        currentTime.textContent = "0:00";
-        totalTime.textContent = "0:00";
-
-
-        await markPlayed(song);
-
-
-        songs[index] =
-            song;
-
-
-        renderSongs();
-
-
-        setupMediaSession(
-            song
-        );
-
-
-        audio.load();
-
-
-        await audio.play();
-
-
-    } catch (error) {
-
-        console.error(
-            "Playback error:",
-            error
-        );
-
-
-        playerTitle.textContent =
-            "Playback error";
-
-
-        playerArtist.textContent =
-            error.message;
-
-
-    } finally {
-
-        changingTrack = false;
-
+      const buffer = await f.arrayBuffer();   // real copy of the bytes
+      const blob = new Blob([buffer], { type: f.type || 'audio/mpeg' });
+      await dbAdd({ title: cleanName(f.name), director, blob, size: blob.size, added: Date.now() });
+      saved++;
+    } catch (err) {
+      console.error('Import failed for', f.name, err);
+      toast('Storage is full or blocked. Could not save ' + f.name);
+      break;
     }
+  }
+
+  songs = await dbAll();
+  refresh();
+  closeImport();
+  els.fileInput.value = '';
+  if (saved) toast(saved + (saved === 1 ? ' song' : ' songs') + ' saved to your library');
 }
 
+/* ================= Edit / Delete ================= */
+function openEdit(id) {
+  const song = songs.find(s => s.id === id);
+  if (!song) return;
+  editingId = id;
+  els.editTitle.value = song.title;
+  els.editDirector.value = song.director === UNKNOWN ? '' : (song.director || '');
+  els.editModal.hidden = false;
+  els.editTitle.focus();
+}
 
-/* =========================================================
-   BUILD QUEUE
-   ========================================================= */
+async function saveEdit() {
+  const song = songs.find(s => s.id === editingId);
+  if (!song) return;
+  song.title = els.editTitle.value.trim() || song.title;
+  song.director = els.editDirector.value.trim() || UNKNOWN;
+  await dbPut(song);
+  els.editModal.hidden = true;
+  editingId = null;
+  refresh();
+  if (song.id === currentId) {
+    els.nowTitle.textContent = song.title;
+    els.nowSub.textContent = directorOf(song);
+    updateMediaSession(song);
+  }
+  toast('Changes saved');
+}
 
-function buildPlayQueue() {
+async function removeSong(id) {
+  const song = songs.find(s => s.id === id);
+  if (!song) return;
+  const msg = song.file
+    ? 'Hide "' + song.title + '" on this phone?\n\nTo delete it everywhere, also remove it from the songs folder on GitHub.'
+    : 'Delete "' + song.title + '" from Rishi Music?';
+  if (!confirm(msg)) return;
 
-    const selected =
-        directorFilter.value ||
-        "All";
+  const wasCurrent = id === currentId;
+  await dbDelete(id);
+  songs = songs.filter(s => s.id !== id);
+  queue = queue.filter(q => q !== id);
+  history = history.filter(h => h !== id);
+  delete playedMap[id];
+  savePlayed();
+  if (song.file) addRemoved(song.file);
 
+  if (wasCurrent) {
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
+    if (currentUrl) { URL.revokeObjectURL(currentUrl); currentUrl = null; }
+    currentId = null;
+    els.nowTitle.textContent = 'No track playing';
+    els.nowSub.textContent = 'Select a song from your library';
+    els.seek.value = 0; setRangeFill(0);
+    els.cur.textContent = '0:00'; els.dur.textContent = '0:00';
+    document.body.classList.add('is-idle');
+    updatePlayIcon();
+    refresh();
+    const nextId = pickRandom();
+    if (nextId != null) playSong(nextId);
+    return;
+  }
+  refresh();
+  toast(song.file ? 'Hidden on this phone' : 'Song deleted');
+}
 
-    const search =
-        searchInput.value
-            .trim()
-            .toLowerCase();
+function resetToday() {
+  playedMap = {};
+  savePlayed();
+  badIds.clear();
+  renderList();
+  toast('Cleared. All songs can shuffle again.');
+}
 
+/* ================= Songs stored in your GitHub repo ================= */
+/* Put audio files in the "songs" folder of the repo:
+     songs/Anirudh/Song name.mp3   -> director = Anirudh
+     songs/Song name.mp3           -> director = Unknown Director
+   On every start (and when you press Sync) the app asks GitHub which files exist
+   and copies the new ones into the phone, so they also play offline. */
+const AUDIO_RE = /\.(mp3|m4a|aac|wav|ogg|flac|opus|weba)$/i;
+const REMOVED_KEY = 'rishi-removed-v1';
+let syncing = false;
 
-    let available =
-        songs.filter(function (song) {
+function loadRemoved() {
+  try { return new Set(JSON.parse(localStorage.getItem(REMOVED_KEY) || '[]')); }
+  catch (e) { return new Set(); }
+}
+function addRemoved(path) {
+  const set = loadRemoved();
+  set.add(path);
+  try { localStorage.setItem(REMOVED_KEY, JSON.stringify([...set])); } catch (e) {}
+}
 
-            const title =
-                getSongTitle(song)
-                    .toLowerCase();
+function repoInfo() {
+  const host = location.hostname;
+  if (!host.endsWith('.github.io')) return null;
+  const owner = host.slice(0, -'.github.io'.length);
+  const repo = location.pathname.split('/')[1];
+  return owner && repo ? { owner, repo } : null;
+}
 
-            const director =
-                getSongDirector(song);
+function guessType(name) {
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  return ({ mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav',
+            ogg: 'audio/ogg', opus: 'audio/ogg', flac: 'audio/flac', weba: 'audio/webm' })[ext] || 'audio/mpeg';
+}
 
+async function listRepoSongs() {
+  const info = repoInfo();
+  if (!info) return null;
+  for (const branch of ['main', 'master']) {
+    try {
+      const url = 'https://api.github.com/repos/' + info.owner + '/' + info.repo +
+                  '/git/trees/' + branch + '?recursive=1';
+      const r = await fetch(url, { headers: { Accept: 'application/vnd.github+json' } });
+      if (r.status === 404) continue;
+      if (!r.ok) return null;
+      const data = await r.json();
+      return data.tree
+        .filter(t => t.type === 'blob' && t.path.startsWith('songs/') && AUDIO_RE.test(t.path))
+        .map(t => t.path);
+    } catch (e) { return null; }
+  }
+  return null;
+}
 
-            return (
+async function syncRepoSongs(manual) {
+  if (syncing) return;
+  syncing = true;
+  try {
+    const paths = await listRepoSongs();
+    if (paths === null) {
+      if (manual) toast('Could not reach GitHub. Check your internet and try again.');
+      return;
+    }
+    const have = new Set(songs.filter(s => s.file).map(s => s.file));
+    const removed = loadRemoved();
+    const todo = paths.filter(p => !have.has(p) && !removed.has(p));
+    if (!todo.length) {
+      if (manual) toast(paths.length ? 'Your library is up to date' : 'No songs found in the songs folder yet');
+      return;
+    }
 
-                (
-                    selected === "All" ||
-                    director === selected
-                )
+    if (navigator.storage && navigator.storage.persist) {
+      try { await navigator.storage.persist(); } catch (e) {}
+    }
 
-                &&
-
-                (
-                    search === "" ||
-                    title.includes(search)
-                )
-
-                &&
-
-                !playedToday(song)
-
-            );
-
+    let ok = 0, failed = 0;
+    for (let i = 0; i < todo.length; i++) {
+      const path = todo[i];
+      toast('Adding from GitHub ' + (i + 1) + ' of ' + todo.length + '\u2026');
+      try {
+        const url = path.split('/').map(encodeURIComponent).join('/');
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        let blob = await r.blob();
+        const parts = path.split('/');
+        const filename = parts[parts.length - 1];
+        if (!blob.type.startsWith('audio/')) blob = new Blob([blob], { type: guessType(filename) });
+        await dbAdd({
+          title: cleanName(filename),
+          director: parts.length > 2 ? parts[1] : UNKNOWN,
+          blob, size: blob.size, added: Date.now(), file: path
         });
-
-
-    /*
-     * Shuffle.
-     */
-
-    for (
-        let i = available.length - 1;
-        i > 0;
-        i--
-    ) {
-
-        const j =
-            Math.floor(
-                Math.random() *
-                (i + 1)
-            );
-
-
-        [
-            available[i],
-            available[j]
-        ] =
-        [
-            available[j],
-            available[i]
-        ];
-
+        ok++;
+        songs = await dbAll();
+        refresh();
+      } catch (err) {
+        console.error('Sync failed for', path, err);
+        failed++;
+      }
     }
-
-
-    /*
-     * Try to mix music directors.
-     */
-
-    const mixed = [];
-
-    let previousDirector = "";
-
-
-    while (
-        available.length
-    ) {
-
-        let position =
-            available.findIndex(
-                function (song) {
-
-                    return (
-                        getSongDirector(song) !==
-                        previousDirector
-                    );
-
-                }
-            );
-
-
-        if (
-            position === -1
-        ) {
-
-            position = 0;
-
-        }
-
-
-        const selectedSong =
-            available.splice(
-                position,
-                1
-            )[0];
-
-
-        mixed.push(
-            selectedSong.id
-        );
-
-
-        previousDirector =
-            getSongDirector(
-                selectedSong
-            );
-
-    }
-
-
-    playQueue =
-        mixed;
+    toast(ok + (ok === 1 ? ' song' : ' songs') + ' added from GitHub' + (failed ? ', ' + failed + ' failed' : ''));
+  } finally {
+    syncing = false;
+  }
 }
 
+/* ================= Backup / Restore ================= */
+/* One file holding every song + its name and director.
+   Keep it in Google Drive / your computer. Restore it any time. */
+const BACKUP_MAGIC = 'RISHIMUSIC1';
 
-/* =========================================================
-   NEXT SONG
-   ========================================================= */
+function exportBackup() {
+  if (!songs.length) { toast('Nothing to back up yet'); return; }
+  const meta = songs.map(s => ({
+    title: s.title,
+    director: directorOf(s),
+    type: s.blob.type || 'audio/mpeg',
+    size: s.blob.size,
+    added: s.added || Date.now(),
+    file: s.file || null
+  }));
+  const head = new TextEncoder().encode(JSON.stringify({ magic: BACKUP_MAGIC, songs: meta }));
+  const len = new Uint8Array(4);
+  new DataView(len.buffer).setUint32(0, head.length);
+  const file = new Blob([len, head, ...songs.map(s => s.blob)], { type: 'application/octet-stream' });
 
-async function playNextSong() {
-
-    if (
-        playQueue.length === 0
-    ) {
-
-        buildPlayQueue();
-
-    }
-
-
-    while (
-        playQueue.length > 0
-    ) {
-
-        const id =
-            playQueue.shift();
-
-
-        const song =
-            songs.find(function (item) {
-
-                return String(item.id) ===
-                    String(id);
-
-            });
-
-
-        if (!song) {
-            continue;
-        }
-
-
-        if (
-            playedToday(song)
-        ) {
-
-            continue;
-        }
-
-
-        await playSongByID(id);
-
-        return;
-    }
-
-
-    playerTitle.textContent =
-        "All songs played today";
-
-
-    playerArtist.textContent =
-        "Add more songs or continue tomorrow";
-
-
-    playBtn.textContent =
-        "▶";
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file);
+  a.download = 'rishi-music-backup-' + todayKey() + '.rmbackup';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  toast('Backup saved to your Downloads folder');
 }
 
+async function restoreBackup(file) {
+  try {
+    const n = new DataView(await file.slice(0, 4).arrayBuffer()).getUint32(0);
+    const head = JSON.parse(await file.slice(4, 4 + n).text());
+    if (head.magic !== BACKUP_MAGIC) throw new Error('not a backup');
 
-/* =========================================================
-   PREVIOUS
-   ========================================================= */
-
-async function playPreviousSong() {
-
-    if (
-        songs.length === 0
-    ) {
-
-        return;
+    if (navigator.storage && navigator.storage.persist) {
+      try { await navigator.storage.persist(); } catch (e) {}
     }
 
-
-    let index =
-        currentIndex - 1;
-
-
-    if (
-        index < 0
-    ) {
-
-        index =
-            songs.length - 1;
-
+    const have = new Set(songs.map(s => s.title + '|' + directorOf(s) + '|' + s.blob.size));
+    let offset = 4 + n, added = 0, skipped = 0;
+    for (let i = 0; i < head.songs.length; i++) {
+      const m = head.songs[i];
+      toast('Restoring ' + (i + 1) + ' of ' + head.songs.length + '\u2026');
+      const part = file.slice(offset, offset + m.size);
+      offset += m.size;
+      const key = m.title + '|' + m.director + '|' + m.size;
+      if (have.has(key)) { skipped++; continue; }
+      const buffer = await part.arrayBuffer();
+      await dbAdd({ title: m.title, director: m.director, blob: new Blob([buffer], { type: m.type }), size: m.size, added: m.added, file: m.file || undefined });
+      have.add(key);
+      added++;
     }
-
-
-    await playSongAtIndex(
-        index
-    );
+    songs = await dbAll();
+    refresh();
+    toast(added + ' restored' + (skipped ? ', ' + skipped + ' already in your library' : ''));
+  } catch (err) {
+    console.error(err);
+    toast('That is not a valid Rishi Music backup file');
+  }
 }
 
-
-/* =========================================================
-   PLAY BUTTON
-   ========================================================= */
-
-playBtn.addEventListener(
-    "click",
-    async function () {
-
-        if (
-            currentIndex === -1
-        ) {
-
-            await playNextSong();
-
-            return;
-        }
-
-
-        if (
-            audio.paused
-        ) {
-
-            try {
-
-                await audio.play();
-
-            } catch (error) {
-
-                console.error(
-                    error
-                );
-
-            }
-
-        } else {
-
-            audio.pause();
-
-        }
-
-    }
-);
-
-
-/* =========================================================
-   NEXT / PREVIOUS
-   ========================================================= */
-
-nextBtn.addEventListener(
-    "click",
-    playNextSong
-);
-
-
-prevBtn.addEventListener(
-    "click",
-    playPreviousSong
-);
-
-
-/* =========================================================
-   AUTOMATIC NEXT
-   ========================================================= */
-
-audio.addEventListener(
-    "ended",
-    function () {
-
-        console.log(
-            "Song finished - next song"
-        );
-
-
-        playNextSong();
-
-    }
-);
-
-
-/* =========================================================
-   PLAY / PAUSE UI
-   ========================================================= */
-
-audio.addEventListener(
-    "play",
-    function () {
-
-        playBtn.textContent = "⏸";
-
-    }
-);
-
-
-audio.addEventListener(
-    "pause",
-    function () {
-
-        playBtn.textContent = "▶";
-
-    }
-);
-
-
-/* =========================================================
-   METADATA
-   ========================================================= */
-
-audio.addEventListener(
-    "loadedmetadata",
-    function () {
-
-        if (
-            Number.isFinite(
-                audio.duration
-            )
-        ) {
-
-            progressBar.max =
-                audio.duration;
-
-
-            totalTime.textContent =
-                formatTime(
-                    audio.duration
-                );
-
-        }
-
-    }
-);
-
-
-/* =========================================================
-   TIME UPDATE
-   ========================================================= */
-
-audio.addEventListener(
-    "timeupdate",
-    function () {
-
-        if (
-            !Number.isFinite(
-                audio.duration
-            )
-        ) {
-
-            return;
-        }
-
-
-        progressBar.max =
-            audio.duration;
-
-
-        progressBar.value =
-            audio.currentTime;
-
-
-        currentTime.textContent =
-            formatTime(
-                audio.currentTime
-            );
-
-
-        totalTime.textContent =
-            formatTime(
-                audio.duration
-            );
-
-    }
-);
-
-
-/* =========================================================
-   PROGRESS
-   ========================================================= */
-
-progressBar.addEventListener(
-    "input",
-    function () {
-
-        if (
-            Number.isFinite(
-                audio.duration
-            )
-        ) {
-
-            audio.currentTime =
-                Number(
-                    progressBar.value
-                );
-
-        }
-
-    }
-);
-
-
-/* =========================================================
-   FORMAT TIME
-   ========================================================= */
-
-function formatTime(seconds) {
-
-    if (
-        !Number.isFinite(seconds) ||
-        seconds < 0
-    ) {
-
-        return "0:00";
-    }
-
-
-    const total =
-        Math.floor(seconds);
-
-
-    const minutes =
-        Math.floor(
-            total / 60
-        );
-
-
-    const secondsPart =
-        total % 60;
-
-
-    return (
-        minutes +
-        ":" +
-        String(
-            secondsPart
-        ).padStart(
-            2,
-            "0"
-        )
-    );
+/* ================= Wiring ================= */
+/* Optional buttons are wired safely: if one is missing from index.html,
+   the rest of the app still works. */
+function on(el, evt, fn) { if (el) el.addEventListener(evt, fn); }
+
+els.importBtn.addEventListener('click', openImport);
+on(els.backup, 'click', exportBackup);
+on(els.sync, 'click', () => syncRepoSongs(true));
+on(els.restore, 'click', () => els.restoreInput && els.restoreInput.click());
+on(els.restoreInput, 'change', () => {
+  if (els.restoreInput.files.length) restoreBackup(els.restoreInput.files[0]);
+  els.restoreInput.value = '';
+});
+els.importCancel.addEventListener('click', closeImport);
+els.importChoose.addEventListener('click', () => els.fileInput.click());
+els.fileInput.addEventListener('change', () => {
+  if (els.fileInput.files.length) importFiles(els.fileInput.files);
+});
+
+els.editCancel.addEventListener('click', () => { els.editModal.hidden = true; });
+els.editSave.addEventListener('click', saveEdit);
+
+[els.importModal, els.editModal].forEach(m => {
+  m.addEventListener('click', e => {
+    if (e.target === m && !els.importCancel.disabled) m.hidden = true;
+  });
+});
+
+els.select.addEventListener('change', renderList);
+els.search.addEventListener('input', renderList);
+els.playAll.addEventListener('click', shufflePlay);
+on(els.reset, 'click', resetToday);
+
+els.play.addEventListener('click', togglePlay);
+els.next.addEventListener('click', () => nextTrack(false));
+els.prev.addEventListener('click', prevTrack);
+
+/* A new day starts: refresh the "Played today" marks when you come back to the app */
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) { playedMap = loadPlayed(); savePlayed(); renderList(); }
+});
+
+/* ================= Start ================= */
+(async function init() {
+  try {
+    db = await openDB();
+    songs = await dbAll();
+    refresh();
+    syncRepoSongs(false);
+  } catch (err) {
+    console.error(err);
+    toast('Storage is not available in this browser');
+  }
+})();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW failed', err));
+  });
 }
-
-
-/* =========================================================
-   SEARCH
-   ========================================================= */
-
-searchInput.addEventListener(
-    "input",
-    function () {
-
-        playQueue = [];
-
-        renderSongs();
-
-    }
-);
-
-
-/* =========================================================
-   DIRECTOR FILTER
-   ========================================================= */
-
-directorFilter.addEventListener(
-    "change",
-    function () {
-
-        playQueue = [];
-
-
-        if (viewTitle) {
-
-            viewTitle.textContent =
-                directorFilter.value === "All"
-                    ? "All Songs"
-                    : directorFilter.value;
-
-        }
-
-
-        renderSongs();
-
-        buildPlayQueue();
-
-    }
-);
-
-
-/* =========================================================
-   EDIT
-   ========================================================= */
-
-async function editSong(id) {
-
-    const song =
-        await getSong(id);
-
-
-    if (!song) {
-        return;
-    }
-
-
-    const result =
-        await askEditDetails(
-            getSongTitle(song),
-            getSongDirector(song)
-        );
-
-
-    if (!result) {
-        return;
-    }
-
-
-    song.title =
-        result.title;
-
-
-    song.director =
-        result.director;
-
-
-    await updateSong(song);
-
-
-    await reloadLibrary();
-}
-
-
-/* =========================================================
-   EDIT POPUP
-   ========================================================= */
-
-function askEditDetails(title, director) {
-
-    return new Promise(function (resolve) {
-
-        const overlay =
-            document.createElement("div");
-
-
-        overlay.style.position = "fixed";
-        overlay.style.inset = "0";
-        overlay.style.background =
-            "rgba(0,0,0,0.75)";
-        overlay.style.display = "flex";
-        overlay.style.alignItems = "center";
-        overlay.style.justifyContent = "center";
-        overlay.style.zIndex = "999999";
-        overlay.style.padding = "20px";
-
-
-        const box =
-            document.createElement("div");
-
-
-        box.style.width = "100%";
-        box.style.maxWidth = "420px";
-        box.style.background =
-            "#062b63";
-        box.style.padding = "25px";
-        box.style.borderRadius = "20px";
-        box.style.color = "white";
-
-
-        const heading =
-            document.createElement("h2");
-
-
-        heading.textContent =
-            "Edit Song";
-
-
-        const titleInput =
-            document.createElement("input");
-
-
-        titleInput.value =
-            title;
-
-
-        titleInput.style.width = "100%";
-        titleInput.style.padding = "12px";
-        titleInput.style.boxSizing = "border-box";
-        titleInput.style.marginBottom = "12px";
-
-
-        const directorInput =
-            document.createElement("input");
-
-
-        directorInput.value =
-            director;
-
-
-        directorInput.style.width = "100%";
-        directorInput.style.padding = "12px";
-        directorInput.style.boxSizing = "border-box";
-
-
-        const buttons =
-            document.createElement("div");
-
-
-        buttons.style.marginTop = "20px";
-        buttons.style.display = "flex";
-        buttons.style.gap = "10px";
-
-
-        const cancel =
-            document.createElement("button");
-
-
-        cancel.textContent =
-            "Cancel";
-
-
-        const save =
-            document.createElement("button");
-
-
-        save.textContent =
-            "Save";
-
-
-        buttons.appendChild(cancel);
-        buttons.appendChild(save);
-
-
-        box.appendChild(heading);
-        box.appendChild(titleInput);
-        box.appendChild(directorInput);
-        box.appendChild(buttons);
-
-
-        overlay.appendChild(box);
-        document.body.appendChild(overlay);
-
-
-        save.onclick =
-            function () {
-
-                const newTitle =
-                    titleInput.value.trim();
-
-
-                const newDirector =
-                    directorInput.value.trim();
-
-
-                if (
-                    !newTitle
-                ) {
-
-                    return;
-
-                }
-
-
-                document.body.removeChild(
-                    overlay
-                );
-
-
-                resolve({
-                    title: newTitle,
-                    director:
-                        newDirector ||
-                        "UNKNOWN DIRECTOR"
-                });
-
-            };
-
-
-        cancel.onclick =
-            function () {
-
-                document.body.removeChild(
-                    overlay
-                );
-
-
-                resolve(null);
-
-            };
-
-    });
-}
-
-
-/* =========================================================
-   DELETE
-   ========================================================= */
-
-async function deleteSong(id) {
-
-    const song =
-        await getSong(id);
-
-
-    if (!song) {
-        return;
-    }
-
-
-    if (
-        !confirm(
-            'Delete "' +
-            getSongTitle(song) +
-            '"?'
-        )
-    ) {
-
-        return;
-    }
-
-
-    await deleteSongFromDB(id);
-
-
-    if (
-        currentIndex >= 0 &&
-        songs[currentIndex] &&
-        String(
-            songs[currentIndex].id
-        ) === String(id)
-    ) {
-
-        audio.pause();
-
-        audio.removeAttribute(
-            "src"
-        );
-
-        audio.load();
-
-
-        if (
-            currentObjectURL
-        ) {
-
-            URL.revokeObjectURL(
-                currentObjectURL
-            );
-
-            currentObjectURL =
-                null;
-        }
-
-
-        currentIndex = -1;
-
-
-        playerTitle.textContent =
-            "No track playing";
-
-
-        playerArtist.textContent =
-            "Select a song from your library";
-
-    }
-
-
-    playQueue = [];
-
-
-    await reloadLibrary();
-}
-
-
-/* =========================================================
-   MEDIA SESSION
-   ========================================================= */
-
-function setupMediaSession(song) {
-
-    if (
-        !("mediaSession" in navigator)
-    ) {
-
-        return;
-    }
-
-
-    try {
-
-        navigator.mediaSession.metadata =
-            new MediaMetadata({
-
-                title:
-                    getSongTitle(song),
-
-                artist:
-                    getSongDirector(song),
-
-                album:
-                    "Rishi Music"
-
-            });
-
-    } catch (error) {
-
-        console.warn(
-            "Media metadata error:",
-            error
-        );
-
-    }
-
-
-    const handlers = {
-
-        play: function () {
-            return audio.play();
-        },
-
-        pause: function () {
-            audio.pause();
-        },
-
-        nexttrack: function () {
-            return playNextSong();
-        },
-
-        previoustrack: function () {
-            return playPreviousSong();
-        },
-
-        seekbackward: function () {
-
-            audio.currentTime =
-                Math.max(
-                    0,
-                    audio.currentTime - 10
-                );
-
-        },
-
-        seekforward: function () {
-
-            audio.currentTime =
-                Math.min(
-                    audio.duration || Infinity,
-                    audio.currentTime + 10
-                );
-
-        }
-
-    };
-
-
-    Object.keys(handlers).forEach(
-        function (action) {
-
-            try {
-
-                navigator.mediaSession
-                    .setActionHandler(
-                        action,
-                        handlers[action]
-                    );
-
-            } catch (error) {
-
-                console.warn(
-                    "Media action unsupported:",
-                    action
-                );
-
-            }
-
-        }
-    );
-}
-
-
-/* =========================================================
-   PERSISTENT STORAGE
-   ========================================================= */
-
-async function requestPersistentStorage() {
-
-    if (
-        navigator.storage &&
-        navigator.storage.persist
-    ) {
-
-        try {
-
-            const result =
-                await navigator.storage.persist();
-
-
-            console.log(
-                "Persistent storage:",
-                result
-            );
-
-        } catch (error) {
-
-            console.warn(
-                "Persistent storage:",
-                error
-            );
-
-        }
-
-    }
-}
-
-
-/* =========================================================
-   START
-   ========================================================= */
-
-async function startRishiMusic() {
-
-    try {
-
-        await openDatabase();
-
-        await requestPersistentStorage();
-
-        await reloadLibrary();
-
-        buildPlayQueue();
-
-
-        console.log(
-            "================================"
-        );
-
-        console.log(
-            "RISHI MUSIC READY"
-        );
-
-        console.log(
-            "Database:",
-            DB_NAME
-        );
-
-        console.log(
-            "Version:",
-            db.version
-        );
-
-        console.log(
-            "Store:",
-            STORE_NAME
-        );
-
-        console.log(
-            "Songs:",
-            songs.length
-        );
-
-        console.log(
-            "================================"
-        );
-
-
-    } catch (error) {
-
-        console.error(
-            "Rishi Music startup error:",
-            error
-        );
-
-
-        alert(
-            "Rishi Music could not start.\n\n" +
-            (
-                error.message ||
-                String(error)
-            )
-        );
-
-    }
-}
-
-
-startRishiMusic();
