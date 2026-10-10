@@ -1,71 +1,132 @@
-/* Rishi Music service worker
-   Caches the app files so the app opens offline.
-   Your songs are NOT stored here. They live in IndexedDB (see app.js).
-   Paths are relative, so this works at https://<username>.github.io/RISHI9000/ */
+"use strict";
 
-const CACHE = 'rishi-music-v6';   // change this number whenever you update your files
+const CACHE_NAME = "rishiman-cache-v2";
 
-const APP_SHELL = [
-  './',
-  'index.html',
-  'style.css',
-  'app.js',
-  'manifest.json',
-  'icons/icon-192.png',
-  'icons/icon-512.png'
+const APP_FILES = [
+"./",
+"./index.html",
+"./style.css",
+"./app.js",
+"./manifest.json",
+"./icon-192.png",
+"./icon-512.png"
 ];
 
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE)
-      .then(cache => Promise.all(APP_SHELL.map(f => cache.add(f).catch(() => {}))))   // one missing file must not break the worker
-      .then(() => self.skipWaiting())
-  );
+// INSTALL
+self.addEventListener("install", function (event) {
+event.waitUntil(
+caches.open(CACHE_NAME)
+.then(function (cache) {
+return cache.addAll(APP_FILES);
+})
+.then(function () {
+return self.skipWaiting();
+})
+);
 });
 
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
-});
+// ACTIVATE
+self.addEventListener("activate", function (event) {
+event.waitUntil(
+caches.keys()
+.then(function (cacheNames) {
+return Promise.all(
+cacheNames.map(function (cacheName) {
+if (
+cacheName.indexOf("rishiman-cache-") === 0 &&
+cacheName !== CACHE_NAME
+) {
+return caches.delete(cacheName);
+}
 
-self.addEventListener('fetch', event => {
-  const req = event.request;
-  if (req.method !== 'GET') return;
-
-  const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return;
-  if (url.pathname.includes('/songs/') || req.headers.has('range')) return;   // audio is stored by the app, not cached here
-
-  // Page loads: try network first, fall back to cached page when offline
-  if (req.mode === 'navigate') {
-    event.respondWith(
-      fetch(req)
-        .then(res => {
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put('index.html', copy));
-          return res;
-        })
-        .catch(() => caches.match('index.html').then(r => r || caches.match('./')))
+```
+        return Promise.resolve(false);
+      })
     );
-    return;
-  }
+  })
+  .then(function () {
+    return self.clients.claim();
+  })
+```
 
-  // Other files: serve from cache instantly, refresh in the background
-  event.respondWith(
-    caches.match(req).then(cached => {
-      const fetching = fetch(req)
-        .then(res => {
-          if (res && res.status === 200) {
-            const copy = res.clone();
-            caches.open(CACHE).then(c => c.put(req, copy));
+);
+});
+
+// FETCH
+self.addEventListener("fetch", function (event) {
+var request = event.request;
+
+if (request.method !== "GET") {
+return;
+}
+
+var url = new URL(request.url);
+
+if (url.origin !== self.location.origin) {
+return;
+}
+
+// Leave media range requests untouched.
+if (request.headers.has("range")) {
+return;
+}
+
+event.respondWith(
+caches.match(request)
+.then(function (cachedResponse) {
+if (cachedResponse) {
+return cachedResponse;
+}
+
+```
+    return fetch(request)
+      .then(function (response) {
+        if (!response || !response.ok) {
+          return response;
+        }
+
+        var responseCopy = response.clone();
+
+        caches.open(CACHE_NAME)
+          .then(function (cache) {
+            cache.put(request, responseCopy);
+          })
+          .catch(function () {});
+
+        return response;
+      })
+      .catch(function () {
+        if (request.mode === "navigate") {
+          return caches.match("./index.html")
+            .then(function (indexPage) {
+              if (indexPage) {
+                return indexPage;
+              }
+
+              return new Response(
+                "You are offline. Please reconnect and try again.",
+                {
+                  status: 503,
+                  headers: {
+                    "Content-Type": "text/plain; charset=utf-8"
+                  }
+                }
+              );
+            });
+        }
+
+        return new Response(
+          "This resource is unavailable offline.",
+          {
+            status: 503,
+            headers: {
+              "Content-Type": "text/plain; charset=utf-8"
+            }
           }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || fetching;
-    })
-  );
+        );
+      });
+  })
+```
+
+);
 });
