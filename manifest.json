@@ -1,28 +1,36 @@
 {
   "name": "Rishi Music",
-  "short_name": "RishiMusic",
-  "start_url": "https://srishi1009-cyber.github.io/RISHI3000/",
-  "scope": "https://srishi1009-cyber.github.io/RISHI3000/",
-  "id": "https://srishi1009-cyber.github.io/RISHI3000/",
+  "short_name": "Rishi Music",
+  "description": "Personal Audio Station",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#0c0f14",
-  "theme_color": "#1da1f2",
-  "description": "Personal offline music player",
+  "orientation": "portrait",
+  "background_color": "#0b0b0f",
+  "theme_color": "#0b0b0f",
+  "categories": ["music", "entertainment"],
   "icons": [
     {
-      "src": "https://srishi1009-cyber.github.io/RISHI3000/icon-192.png",
+      "src": "icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://srishi1009-cyber.github.io/RISHI3000/icon-512.png",
+      "src": "icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://srishi1009-cyber.github.io/RISHI3000/icon-512.png",
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
